@@ -19,3 +19,4 @@ The sensor publishes the data to an MQTT topic. Deep sleep is used, not to disto
  - D0/GPIO16 - RST (wake-up purpose)
 ## To do:
   -include BME280 sensor
+  -include home assistant template
