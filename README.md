@@ -11,6 +11,6 @@ The sensor publishes the data to an MQTT topic. Deep sleep is used, not to disto
   -home assistant integration included
   
 ## Layout
-.
+![layout](https://github.com/Nanunan/ESP8266_MQTT_temperature_and_humidity_sensor/blob/master/Media/Layout_DHT22.png)
 ## To do:
   -include BME280 sensor
