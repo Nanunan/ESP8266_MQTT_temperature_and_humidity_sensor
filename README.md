@@ -12,5 +12,10 @@ The sensor publishes the data to an MQTT topic. Deep sleep is used, not to disto
   
 ## Layout
 ![layout](https://github.com/Nanunan/ESP8266_MQTT_temperature_and_humidity_sensor/blob/master/Media/Layout_DHT22.png)
+
+ - DHT22 leg 1 - VCC
+ - DHT22 leg 2 - D1/GPIO5
+ - DHT22 leg 4 - GND
+ - D0/GPIO16 - RST (wake-up purpose)
 ## To do:
   -include BME280 sensor
