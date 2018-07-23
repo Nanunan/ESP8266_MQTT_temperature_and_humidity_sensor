@@ -1,2 +1,4 @@
-//Defined pins here for better overview
-#define DHTPIN D4
+//For Wemos D1 Mini
+
+//D1 = SCL
+//D2 = SCA

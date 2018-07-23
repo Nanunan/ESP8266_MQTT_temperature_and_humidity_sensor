@@ -1,28 +1,35 @@
 /*
     Author  : Jan Buhlrich
               Tjorben Eberle @TJ_ger
-    Date    : Mai, 2018
-    Project : Room Sensor
+    Date    : July, 2018
+    Project : MQTT BME280
     Desc    :
     Version : 1.0
 
     Hardware list:  - Wemos D1 mini
-                    - DHT22
-                    - BME280
+                    - Relay Shield
+                    -
 
     circuit diagram:
-    https://github.com/Nanunan/ESP8266_MQTT_temperature_and_humidity_sensor/blob/master/Media/Layout_DHT22.png
 
     Further project information:
-    https://github.com/Nanunan/ESP8266_MQTT_temperature_and_humidity_sensor
 
     Common mistakes & tips:
 
-*/
+Connecting the BME280 Sensor:
+Sensor              ->  Board
+-----------------------------
+Vin (Voltage In)    ->  3.3V
+Gnd (Ground)        ->  Gnd
+SDA (Serial Data)   ->  A4 on Uno/Pro-Mini, 20 on Mega2560/Due, 2 Leonardo/Pro-Micro
+SCK (Serial Clock)  ->  A5 on Uno/Pro-Mini, 21 on Mega2560/Due, 3 Leonardo/Pro-Micro
 
-#ifndef UNIT_TEST
-#include <Arduino.h>
-#endif
+
+
+ */
+
+#include <BME280I2C.h>
+#include <Wire.h>
 
 //MQTT
 #include <PubSubClient.h>
@@ -33,21 +40,22 @@
 #include <ArduinoOTA.h>
 #include <ESP8266mDNS.h>
 
-/*
-  Local Headerfiles
-*/
 #include "pins.h"
 #include "configuration.h"
 
-//DHT
-#include "DHT.h"
-DHT dht(DHTPIN, DHTTYPE);
+
+#define SERIAL_BAUD 115200
+
+BME280I2C bme;    // Default : forced mode, standby time = 1000 ms
+                  // Oversampling = pressure ×1, temperature ×1, humidity ×1, filter off,
+
+
 
 
 //MQTT
-void callback(char* topic, byte* payload, unsigned int length);
+
 WiFiClient wifiClient;
-PubSubClient client(MQTT_SERVER, 1883, callback, wifiClient);
+PubSubClient client(wifiClient);
 char t_char[100];
 char h_char[100];
 
@@ -55,17 +63,10 @@ char h_char[100];
 uint8_t MAC_array[6];
 char MAC_char[18];
 
-//OTA
-bool flashtime = 0;
-
-
-
-/*
-  Setup
-*/
-
-void setup() {
-  Serial.begin(115200, SERIAL_8N1, SERIAL_TX_ONLY);
+//////////////////////////////////////////////////////////////////
+void setup()
+{
+  Serial.begin(SERIAL_BAUD);
 
   //Print mac adress first
   Serial.println();
@@ -93,7 +94,7 @@ void setup() {
 
 //OTA
   ArduinoOTA.setHostname(otahostname);
-  ArduinoOTA.setPassword(otapassword);
+  
   ArduinoOTA.onStart([]() {
     Serial.println("Start");
   });
@@ -116,28 +117,39 @@ void setup() {
   
 //MQTT
 Serial.print("Attempting MQTT connection...");
-      String clientName;
-      clientName =mqtt_clientname;
-      
-      if (client.connect((char*) clientName.c_str(), mqtt_username, mqtt_password)) {
-        Serial.println("\tMQTT Connected");
-        client.subscribe(mqtt_sensor_flash_topic);
-      }
-      else {
-        Serial.println("\tFailed.");
-        abort();
-      }
 
-//DHT
-      dht.begin();
-      Serial.println("DHT started.");
 
+        // init the MQTT connection
+  client.setServer(MQTT_SERVER_IP, MQTT_SERVER_PORT);
+  client.setCallback(callback);
+
+  while(!Serial) {} // Wait
+
+  Wire.begin(D2,D1);
+
+  while(!bme.begin())
+  {
+    Serial.println("Could not find BME280 sensor!");
+    delay(1000);
+  }
+
+  switch(bme.chipModel())
+  {
+     case BME280::ChipModel_BME280:
+       Serial.println("Found BME280 sensor! Success.");
+       break;
+     case BME280::ChipModel_BMP280:
+       Serial.println("Found BMP280 sensor! No Humidity available.");
+       break;
+     default:
+       Serial.println("Found UNKNOWN sensor! Error!");
+  }
 }
 
-void loop() {
+//////////////////////////////////////////////////////////////////
+void loop()
+{
 
-//If "mqtt_sensor_flash_topic" is 0, then read temperature and humidity and go to deepsleep.
-//If "mqtt_sensor_flash_topic" is 1, stay awake, activate OTA and wait for flash.
   
 if (!client.connected()) 
   {
@@ -146,76 +158,54 @@ if (!client.connected())
   client.loop();
   delay(1000);
   client.loop();
+ 
+  //  publishData(t,h);
+     printBME280Data(&Serial);
+   delay(500);
 
-if (flashtime==0)
-{
-  // Reading temperature or humidity takes about 250 milliseconds!
-  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-  float h = dht.readHumidity();
-  // Read temperature as Celsius (the default)
-  float t = dht.readTemperature();
+  //Serial.println("INFO: Closing the MQTT connection");
+  //client.disconnect();
 
-  if (isnan(h) || isnan(t)) {
-    Serial.println("ERROR: Failed to read from DHT sensor!");
-    return;
-  } else {
-    Serial.println(h);
-    Serial.println(t);
-    sprintf(t_char,"%f",t);
-    sprintf(h_char,"%f",h);
+  //Serial.println("INFO: Closing the Wifi connection");
+  //WiFi.disconnect();
 
-    client.publish(mqtt_sensor_temperature_topic,t_char);
-    client.publish(mqtt_sensor_humidity_topic,h_char);
-  }
-
-  Serial.println("INFO: Closing the MQTT connection");
-  client.disconnect();
-
-  Serial.println("INFO: Closing the Wifi connection");
-  WiFi.disconnect();
-
-  ESP.deepSleep(SLEEPING_TIME_IN_SECONDS * 1000000, WAKE_RF_DEFAULT);
+ //ESP.deepSleep(SLEEPING_TIME_IN_SECONDS * 1000000, WAKE_RF_DEFAULT);
   delay(500); // wait for deep sleep to happen
-}
 
-if(flashtime==1)
-  {
-  Serial.println("flashtime");
-  ArduinoOTA.handle();
 
-  }
 
 }
 
+//////////////////////////////////////////////////////////////////
+void printBME280Data
+(
+   Stream* client
+)
+{
+   float temp(NAN), hum(NAN), pres(NAN);
 
-void callback(char* topic, byte* payload, unsigned int length) {
+   BME280::TempUnit tempUnit(BME280::TempUnit_Celsius);
+   BME280::PresUnit presUnit(BME280::PresUnit_Pa);
 
-  //convert topic to string to make it easier to work with
-  String topicStr = topic;
-  //EJ: Note:  the "topic" value gets overwritten everytime it receives confirmation (callback) message from MQTT
+   bme.read(pres, temp, hum, tempUnit, presUnit);
 
-  //Print out some debugging info
-  Serial.println("Callback update.");
-  Serial.print("Topic: ");
-  Serial.println(topicStr);
+   client->print("Temp: ");
+   client->print(temp);
+   client->print("°"+ String(tempUnit == BME280::TempUnit_Celsius ? 'C' :'F'));
+   client->print("\t\tHumidity: ");
+   client->print(hum);
+   client->print("% RH");
+   client->print("\t\tPressure: ");
+   client->print(pres);
+   pres= pres/100;
+   client->println("Pa");
 
-  if (topicStr == mqtt_sensor_flash_topic)
-  {
+   publishData(temp,hum,pres);
 
-    //turn the switch on if the payload is '1' and publish to the MQTT server a confirmation message
-    if (payload[0] == '1') {
-      flashtime = 1;
-      client.publish(mqtt_sensor_flash_confirm, "1");
-    }
-
-    //turn the switch off if the payload is '0' and publish to the MQTT server a confirmation message
-    else if (payload[0] == '0') {
-      flashtime = 0;
-      client.publish(mqtt_sensor_flash_confirm, "0");
-    }
-  }
-
+   delay(1000);
 }
+
+
 
 void reconnectwifi() {
   // Loop until we're reconnected
@@ -237,7 +227,7 @@ void reconnectwifi() {
   }
 }
 
-/*
+
 // function called to publish the temperature and the humidity
 void publishData(float p_temperature, float p_humidity) {
   // create a JSON object
@@ -249,14 +239,40 @@ void publishData(float p_temperature, float p_humidity) {
   root["humidity"] = (String)p_humidity;
   root.prettyPrintTo(Serial);
   Serial.println("");
-  
+  /*
      {
         "temperature": "23.20" ,
         "humidity": "43.70"
      }
-  
+  */
   char data[200];
   root.printTo(data, root.measureLength() + 1);
-  client.publish(mqtt_sensor_data_topic, data, true);
+  client.publish(MQTT_SENSOR_TOPIC, data, true);
 }
-*/
+
+void publishData(float p_temperature, float p_humidity, float p_pressure) {
+  // create a JSON object
+  // doc : https://github.com/bblanchon/ArduinoJson/wiki/API%20Reference
+  StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  // INFO: the data must be converted into a string; a problem occurs when using floats...
+  root["temperature"] = (String)p_temperature;
+  root["humidity"] = (String)p_humidity;
+  root["pressure"] = (String)p_pressure;
+  root.prettyPrintTo(Serial);
+  Serial.println("");
+  /*
+     {
+        "temperature": "23.20" ,
+        "humidity": "43.70"
+     }
+  */
+  char data[200];
+  root.printTo(data, root.measureLength() + 1);
+  client.publish(MQTT_SENSOR_TOPIC, data, true);
+  yield();
+}
+
+// function called when a MQTT message arrived
+void callback(char* p_topic, byte* p_payload, unsigned int p_length) {
+}
