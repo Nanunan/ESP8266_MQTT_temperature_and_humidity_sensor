@@ -26,13 +26,13 @@ Board         ->        Board
 
 
 ## To do:
-  -include DHT22 sensor
-  -include BME 180
+  - include DHT22 sensor
+  - include BME 180 sensor
   
   
 ## Home assistant template
 
- ### Sensors:
+ ### sensor:
   - platform: mqtt
     - state_topic: 'SENSORTOPIC'
     - name: 'NameTemperature'
