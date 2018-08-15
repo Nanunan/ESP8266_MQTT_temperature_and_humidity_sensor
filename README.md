@@ -4,11 +4,11 @@ This is an ESP8266 based project to monitor the temperature and humidity in your
 The sensor publishes the data to an MQTT topic. Deep sleep is used, not to distort the meassurements of the sensor I use Home Asssistant to display the results.
 
 ## Features
-  -ESP8266 with deep sleep
-  -easy configuration window
-  -MQTT publish
-  -supports BME280 sensor
-  -home assistant integration included
+  - ESP8266 with deep sleep
+  - easy configuration window
+  - MQTT publish
+  - supports BME280 sensor
+  - home assistant integration included
   
 ## Layout
 ![layout](https://github.com/Nanunan/ESP8266_MQTT_temperature_and_humidity_sensor/blob/master/Media/Layout_DHT22.png)
